@@ -1,10 +1,10 @@
 {
     "domain": "smartthing_extra",
     "name": "SmartThings Extra",
-    "version": "0.2.1",
+    "version": "0.3.0-mperego.1",
     "after_dependencies": ["smartthings"],
     "requirements": [],
-    "codeowners": ["@mik-laj"],
+    "codeowners": ["@0x-mperego"],
     "iot_class": "cloud_push",
     "config_flow": true
 }
