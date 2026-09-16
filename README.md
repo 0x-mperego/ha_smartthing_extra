@@ -1,132 +1,31 @@
-# SmartThings Extra (Home Assistant Custom Component)
+# SmartThings Extra — mperego fork
 
-This custom component adds a simple service to **synchronize the clock on Samsung ovens** (and other supported Samsung devices) through the **existing [SmartThings integration](https://www.home-assistant.io/integrations/smartthings/)** in Home Assistant.  
-It does **not** use a Personal Access Token — instead it reuses the SmartThings client and tokens already managed by HA.
+Fork of `mik-laj/ha_smartthing_extra` for Home Assistant.
 
----
+It reuses the **official Home Assistant SmartThings integration and its authenticated push client**. No additional Samsung login or Personal Access Token is required.
+
+## Added in this fork
+
+Read-only Samsung cooktop entities for custom SmartThings capabilities that Home Assistant does not currently expose:
+
+- per-zone countdown timer remaining (`samsungce.countDownTimer.currentValue`)
+- per-zone countdown timer initially set (`startValue`)
+- per-zone timer status (`status`)
+- per-zone residual heat (`samsungce.surfaceResidualHeat`)
+
+The sensors subscribe to SmartThings capability events, so timer changes are push-driven rather than periodically polling Samsung.
+
+Initial test target: Samsung NZ64B5066KK.
+
+The original oven clock-sync and generic SmartThings command services are retained from upstream.
 
 ## Installation
 
-The easiest install is via [HACS](https://hacs.xyz):
+Add `0x-mperego/ha_smartthing_extra` to HACS as a custom **Integration**, install it, restart Home Assistant, then add **SmartThings Extra** from Settings > Devices & services.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mik-laj&repository=ha_smartthing_extra&category=integration)
+## Safety
 
-1. Click the button above, and install this integration via HACS.
-1. Restart Home Assistant.
-
-Then click the button below to configure the integration in your Home Assistant instance:
-
-[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=smartthing_extra)
-
-
-### Manual installation
-
-If you prefer, you can also install this integration manually.
-
-1. Copy the folder `smartthing_extra` into your Home Assistant `custom_components/` directory:
-
-```
-config/
-└── custom_components/
-  └── smartthing_extra/
-    ├── __init__.py
-    ├── manifest.json
-    └── services.yaml
-
-```
-
-2. Restart Home Assistant.
-
-3. Then click the button below to configure the integration in your Home Assistant instance:
-
-[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=smartthing_extra)
-
-
----
-
-## Service: `smartthing_extra.sync_time`
-
-### Fields
-
-| Field      | Required | Description                                                                 |
-|------------|----------|-----------------------------------------------------------------------------|
-| `device_id`| yes      | The **HA device_id** of your Samsung oven (from *Settings → Devices*). Only SmartThings devices can be selected. |
-
-The service automatically:
-- Resolves the SmartThings `deviceId` and the proper SmartThings config entry.
-- Builds the correct `execute` command with the current system time. The time is sent in local time without timezone offset (e.g. `2025-08-22T13:37:00`).
-- Sends it to the device through SmartThings Cloud.
-
----
-
-## Example Usage
-
-### One-time service call
-```yaml
-  - action: smartthing_extra.sync_time
-    metadata: {}
-    data:
-      device_id: e92fdc827a68e76c6025876d90174f84
-```
-
-### Automation: Sync clock at HA startup
-
-```yaml
-alias: Sync time on kitchen oven
-description: ""
-triggers:
-  - trigger: homeassistant
-    event: start
-conditions: []
-actions:
-  - action: smartthing_extra.sync_time
-    metadata: {}
-    data:
-      device_id: e92fdc827a68e76c6025876d90174f84
-mode: single
-
-```
-
-## Service: `smartthing_extra.execute_command`
-
-### Fields
-
-| Field       | Required | Description                                                                 |
-|-------------|----------|-----------------------------------------------------------------------------|
-| `device_id` | yes      | The **HA device_id** of your Samsung oven (from *Settings → Devices*). Only SmartThings devices can be selected. |
-| `capability`| yes      | The name of the SmartThing capability. It need to be key of [pysmartthing.capability.Capability](https://github.com/pySmartThings/pysmartthings/blob/main/src/pysmartthings/capability.py) enum class. |
-| `command`.  | yes      | The name of the command. It need to be key of [pysmartthing.command.Command](https://github.com/pySmartThings/pysmartthings/blob/main/src/pysmartthings/command.py) enum class. |
-| `component`.| yes      | The name of the component. |
-| `arguments`.| no       | The arguments that will be passed to command. It is a free-form object. |
-
-The service automatically:
-- Resolves the SmartThings `deviceId` and the proper SmartThings config entry.
-- Validate capability and command arguments.
-- Sends command to the device through SmartThings Cloud.
-
----
-
-## Example Usage
-
-### One-time service call
-
-```yaml
-  - action: smartthing_extra.send_command
-    data:
-      component: main
-      device_id: e92fdc827a68e76c6025876d90174f84
-      capability: refresh
-      command: refresh
-```
-
----
-
-## Notes
-
-* Only works for devices connected through the **SmartThings integration**.
-* No PAT (personal access token) needed — tokens are handled by HA’s built-in SmartThings integration.
-
----
+The cooktop additions in this fork are read-only. They do not add remote burner or cooktop power controls.
 
 ## License
 
