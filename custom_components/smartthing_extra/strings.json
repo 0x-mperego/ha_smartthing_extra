@@ -4,7 +4,7 @@
         "step": {
             "user": {
                 "title": "Set up SmartThings Extra",
-                "description": "This integration exposes services to call custom SmartThings commands.\nNo additional configuration is required."
+                "description": "Reuses the official SmartThings integration to expose additional Samsung services and read-only cooktop timer/residual-heat sensors. No additional credentials are required."
             }
         },
         "abort": {
