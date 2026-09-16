@@ -11,11 +11,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from pysmartthings import DeviceEvent
 
-DOMAIN = "smartthing_extra"
-
 CAP_TIMER = "samsungce.countDownTimer"
 CAP_HEAT = "samsungce.surfaceResidualHeat"
-TIMER_ATTRS = ("startValue", "currentValue", "status")
 HEAT_ATTR = "surfaceResidualHeat"
 
 
@@ -24,6 +21,10 @@ def _find_smartthings_entry(hass: HomeAssistant) -> ConfigEntry | None:
         if entry.state == ConfigEntryState.LOADED:
             return entry
     return None
+
+
+def _value(attribute: Any) -> Any:
+    return getattr(attribute, "value", attribute)
 
 
 def _iter_cooktop_components(device: Any):
@@ -47,11 +48,12 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
     client = st_entry.runtime_data.client
 
-    for device in st_entry.runtime_data.devices:
+    for device in st_entry.runtime_data.devices.values():
         device_info = getattr(device, "device", None)
         label = getattr(device_info, "label", "") or getattr(device_info, "name", "") or ""
         device_type = getattr(device_info, "device_type_name", "") or ""
-        if "cooktop" not in f"{label} {device_type}".lower():
+        model = getattr(device_info, "model", "") or ""
+        if "cooktop" not in f"{label} {device_type} {model}".lower() and model != "NZ64B5066KK":
             continue
 
         for component, component_status in _iter_cooktop_components(device):
@@ -60,53 +62,26 @@ async def async_setup_entry(
             zone = int(component.split("-")[-1])
 
             if timer:
-                entities.append(
-                    SmartThingsExtraSensor(
-                        client,
-                        device,
-                        component,
-                        zone,
-                        CAP_TIMER,
-                        "currentValue",
-                        SensorEntityDescription(
-                            key=f"{component}_timer_remaining",
-                            name=f"Zona {zone} timer residuo",
-                            native_unit_of_measurement="min",
-                            icon="mdi:timer-sand",
-                        ),
+                for attribute, suffix, name, icon, unit in (
+                    ("currentValue", "timer_remaining", "timer residuo", "mdi:timer-sand", "min"),
+                    ("startValue", "timer_set", "timer impostato", "mdi:timer-cog-outline", "min"),
+                    ("status", "timer_status", "stato timer", "mdi:timer-outline", None),
+                ):
+                    entities.append(
+                        SmartThingsExtraSensor(
+                            client,
+                            device,
+                            component,
+                            CAP_TIMER,
+                            attribute,
+                            SensorEntityDescription(
+                                key=f"{component}_{suffix}",
+                                name=f"Zona {zone} {name}",
+                                native_unit_of_measurement=unit,
+                                icon=icon,
+                            ),
+                        )
                     )
-                )
-                entities.append(
-                    SmartThingsExtraSensor(
-                        client,
-                        device,
-                        component,
-                        zone,
-                        CAP_TIMER,
-                        "startValue",
-                        SensorEntityDescription(
-                            key=f"{component}_timer_set",
-                            name=f"Zona {zone} timer impostato",
-                            native_unit_of_measurement="min",
-                            icon="mdi:timer-cog-outline",
-                        ),
-                    )
-                )
-                entities.append(
-                    SmartThingsExtraSensor(
-                        client,
-                        device,
-                        component,
-                        zone,
-                        CAP_TIMER,
-                        "status",
-                        SensorEntityDescription(
-                            key=f"{component}_timer_status",
-                            name=f"Zona {zone} stato timer",
-                            icon="mdi:timer-outline",
-                        ),
-                    )
-                )
 
             if heat:
                 entities.append(
@@ -114,7 +89,6 @@ async def async_setup_entry(
                         client,
                         device,
                         component,
-                        zone,
                         CAP_HEAT,
                         HEAT_ATTR,
                         SensorEntityDescription(
@@ -137,7 +111,6 @@ class SmartThingsExtraSensor(SensorEntity):
         client: Any,
         device: Any,
         component: str,
-        zone: int,
         capability: str,
         attribute: str,
         description: SensorEntityDescription,
@@ -148,22 +121,19 @@ class SmartThingsExtraSensor(SensorEntity):
         self._component = component
         self._capability = capability
         self._attribute = attribute
-        self._attr_unique_id = (
-            f"{device.device.device_id}_{component}_{capability}_{attribute}"
-        )
+        self._attr_unique_id = f"{device.device.device_id}_{component}_{capability}_{attribute}"
         self._attr_device_info = DeviceInfo(
             identifiers={(ST_DOMAIN, device.device.device_id)}
         )
+        self._attr_available = device.online
         self._attr_native_value = self._read_value()
 
     def _read_value(self) -> Any:
         try:
-            value = self._device.status[self._component][self._capability][
-                self._attribute
-            ].value
+            attribute = self._device.status[self._component][self._capability][self._attribute]
         except (KeyError, TypeError, AttributeError):
             return None
-        return value
+        return _value(attribute)
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
