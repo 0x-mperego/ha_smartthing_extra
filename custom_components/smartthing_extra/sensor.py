@@ -23,8 +23,12 @@ def _find_smartthings_entry(hass: HomeAssistant) -> ConfigEntry | None:
     return None
 
 
-def _value(attribute: Any) -> Any:
-    return getattr(attribute, "value", attribute)
+def _key(value: Any) -> str:
+    return getattr(value, "value", value)
+
+
+def _find_key(mapping: dict[Any, Any], wanted: str) -> Any | None:
+    return next((key for key in mapping if _key(key) == wanted), None)
 
 
 def _iter_cooktop_components(device: Any):
@@ -32,7 +36,7 @@ def _iter_cooktop_components(device: Any):
     for component, component_status in status.items():
         if not component.startswith("burner-"):
             continue
-        if CAP_TIMER in component_status or CAP_HEAT in component_status:
+        if _find_key(component_status, CAP_TIMER) is not None or _find_key(component_status, CAP_HEAT) is not None:
             yield component, component_status
 
 
@@ -57,47 +61,45 @@ async def async_setup_entry(
             continue
 
         for component, component_status in _iter_cooktop_components(device):
-            timer = component_status.get(CAP_TIMER, {})
-            heat = component_status.get(CAP_HEAT, {})
+            timer_key = _find_key(component_status, CAP_TIMER)
+            heat_key = _find_key(component_status, CAP_HEAT)
             zone = int(component.split("-")[-1])
 
-            if timer:
+            if timer_key is not None:
+                timer = component_status[timer_key]
                 for attribute, suffix, name, icon, unit in (
                     ("currentValue", "timer_remaining", "timer residuo", "mdi:timer-sand", "min"),
                     ("startValue", "timer_set", "timer impostato", "mdi:timer-cog-outline", "min"),
                     ("status", "timer_status", "stato timer", "mdi:timer-outline", None),
                 ):
+                    attribute_key = _find_key(timer, attribute)
+                    if attribute_key is not None:
+                        entities.append(
+                            SmartThingsExtraSensor(
+                                client, device, component, timer_key, attribute_key,
+                                SensorEntityDescription(
+                                    key=f"{component}_{suffix}",
+                                    name=f"Zona {zone} {name}",
+                                    native_unit_of_measurement=unit,
+                                    icon=icon,
+                                ),
+                            )
+                        )
+
+            if heat_key is not None:
+                heat = component_status[heat_key]
+                attribute_key = _find_key(heat, HEAT_ATTR)
+                if attribute_key is not None:
                     entities.append(
                         SmartThingsExtraSensor(
-                            client,
-                            device,
-                            component,
-                            CAP_TIMER,
-                            attribute,
+                            client, device, component, heat_key, attribute_key,
                             SensorEntityDescription(
-                                key=f"{component}_{suffix}",
-                                name=f"Zona {zone} {name}",
-                                native_unit_of_measurement=unit,
-                                icon=icon,
+                                key=f"{component}_residual_heat",
+                                name=f"Zona {zone} calore residuo",
+                                icon="mdi:heat-wave",
                             ),
                         )
                     )
-
-            if heat:
-                entities.append(
-                    SmartThingsExtraSensor(
-                        client,
-                        device,
-                        component,
-                        CAP_HEAT,
-                        HEAT_ATTR,
-                        SensorEntityDescription(
-                            key=f"{component}_residual_heat",
-                            name=f"Zona {zone} calore residuo",
-                            icon="mdi:heat-wave",
-                        ),
-                    )
-                )
 
     async_add_entities(entities)
 
@@ -111,8 +113,8 @@ class SmartThingsExtraSensor(SensorEntity):
         client: Any,
         device: Any,
         component: str,
-        capability: str,
-        attribute: str,
+        capability: Any,
+        attribute: Any,
         description: SensorEntityDescription,
     ) -> None:
         self.entity_description = description
@@ -121,19 +123,16 @@ class SmartThingsExtraSensor(SensorEntity):
         self._component = component
         self._capability = capability
         self._attribute = attribute
-        self._attr_unique_id = f"{device.device.device_id}_{component}_{capability}_{attribute}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(ST_DOMAIN, device.device.device_id)}
-        )
+        self._attr_unique_id = f"{device.device.device_id}_{component}_{_key(capability)}_{_key(attribute)}"
+        self._attr_device_info = DeviceInfo(identifiers={(ST_DOMAIN, device.device.device_id)})
         self._attr_available = device.online
         self._attr_native_value = self._read_value()
 
     def _read_value(self) -> Any:
         try:
-            attribute = self._device.status[self._component][self._capability][self._attribute]
+            return self._device.status[self._component][self._capability][self._attribute].value
         except (KeyError, TypeError, AttributeError):
             return None
-        return _value(attribute)
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -148,7 +147,7 @@ class SmartThingsExtraSensor(SensorEntity):
 
     @callback
     def _handle_event(self, event: DeviceEvent) -> None:
-        if event.attribute != self._attribute:
+        if _key(event.attribute) != _key(self._attribute):
             return
         self._attr_native_value = event.value
         self.async_write_ha_state()
