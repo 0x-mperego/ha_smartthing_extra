@@ -7,7 +7,7 @@ from homeassistant.components.smartthings.const import DOMAIN as ST_DOMAIN
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from pysmartthings import DeviceEvent
 
@@ -43,7 +43,7 @@ def _iter_cooktop_components(device: Any):
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     st_entry = _find_smartthings_entry(hass)
     if st_entry is None or not st_entry.runtime_data:
